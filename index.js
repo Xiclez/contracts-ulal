@@ -27,7 +27,8 @@ const __dirname = dirname(__filename);
 
 // --- Inicialización del Servidor ---
 const WORDPRESS_DOMAIN = process.env.WORDPRESS_DOMAIN;
-
+const TEMP_PDF_PATH = path.resolve(__dirname, 'temp_pdfs');
+const FINAL_PDF_PATH = path.resolve(__dirname, 'final_pdfs');
 const app = express();
 const port = process.env.PORT || 3000;
 (async () => {
@@ -63,8 +64,7 @@ const EVOLUTION_INSTANCE_NAME = process.env.EVOLUTION_INSTANCE_NAME;
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 
 // --- Rutas de Almacenamiento ---
-const TEMP_PDF_PATH = path.resolve(__dirname, 'temp_pdfs');
-const FINAL_PDF_PATH = path.resolve(__dirname, 'final_pdfs');
+
 
 // --- Ubicaciones para las Firmas y Fechas en cada página ---
 const USER_SIGNATURE_WIDTH = 203;
