@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Herramienta de Ajuste de Coordenadas de Firma</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .controls, .preview { display: flex; flex-direction: column; }
+        textarea { width: 95%; height: 300px; font-family: monospace; font-size: 14px; margin-bottom: 10px; }
+        #signature-pad { border: 2px dashed #007bff; cursor: crosshair; margin-top: 10px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; margin-top: 10px; width: 100%; }
+        #status { margin-top: 15px; padding: 10px; border-radius: 5px; text-align: center; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        iframe { width: 100%; height: 80vh; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h2>Controles</h2>
+        <p>1. Ajusta las coordenadas en el texto de abajo. <br>2. Dibuja tu firma. <br>3. Haz clic en "Generar PDF".</p>
+
+        <label for="locations">Coordenadas de Firma (en formato JSON):</label>
+        <textarea id="locations"></textarea>
+        
+        <label for="signature-size">Tamaño de la firma (W x H):</label>
+        <div id="signature-size">
+            <input type="number" id="sigWidth" value="203"> x <input type="number" id="sigHeight" value="60">
+        </div>
+
+        <canvas id="signature-pad" width="400" height="150"></canvas>
+        <button id="clear-btn" type="button">Limpiar Firma</button>
+        <button id="submit-btn" type="button" style="background-color: #28a745; color: white;">Generar PDF de Prueba</button>
+        <div id="status"></div>
+    </div>
+    <div class="preview">
+        <h2>Previsualización del PDF</h2>
+        <iframe src="/test_output_signed.pdf"></iframe>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+    <script>
+        const locationsTextarea = document.getElementById('locations');
+        const signaturePadCanvas = document.getElementById('signature-pad');
+        const signaturePad = new SignaturePad(signaturePadCanvas);
+        const statusDiv = document.getElementById('status');
+        
+        // Cargar las coordenadas iniciales en el textarea
+        const initialLocations = [
+    { "page": 0, "sigX": 340, "sigY": 80, "dateX": 340, "dateY": 60 },
+    { "page": 1, "sigX": 340, "sigY": 70, "dateX": 340, "dateY": 50 },
+    { "page": 2, "sigX": 340, "sigY": 100, "dateX": 340, "dateY": 80 },
+    { "page": 3, "sigX": 340, "sigY": 90, "dateX": 340, "dateY": 80 },
+    { "page": 4, "sigX": 340, "sigY": 165, "dateX": 340, "dateY": 130 },
+    { "page": 5, "sigX": 360, "sigY": 110, "dateX": 360, "dateY": 90 },
+    { "page": 6, "sigX": 340, "sigY": 140, "dateX": 340, "dateY": 90 },
+    { "page": 7, "sigX": 350, "sigY": 115, "dateX": 340, "dateY": 90 }
+];
+        locationsTextarea.value = JSON.stringify(initialLocations, null, 4);
+
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            signaturePad.clear();
+        });
+
+        document.getElementById('submit-btn').addEventListener('click', () => {
+            if (signaturePad.isEmpty()) {
+                return alert("Por favor, dibuja una firma primero.");
+            }
+
+            let locations;
+            try {
+                locations = JSON.parse(locationsTextarea.value);
+            } catch (e) {
+                return alert("El formato de las coordenadas JSON es inválido.");
+            }
+
+            const signatureImage = signaturePad.toDataURL('image/png');
+            const signatureSize = {
+                width: parseInt(document.getElementById('sigWidth').value, 10),
+                height: parseInt(document.getElementById('sigHeight').value, 10)
+            };
+
+            statusDiv.textContent = 'Generando PDF...';
+            statusDiv.className = '';
+
+            fetch('/apply-signature', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ signatureImage, locations, signatureSize })
+            })
+            .then(response => response.json().then(data => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+                statusDiv.textContent = data.message;
+                statusDiv.className = ok ? 'success' : 'error';
+            });
+        });
+    </script>
+</body>
+</html>

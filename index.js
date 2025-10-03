@@ -1,56 +1,160 @@
+// =========================================================================
+// --- SERVIDOR DE FIRMA ELECTRÓNICA ULAL ---
+// =========================================================================
+
+// --- Dependencias ---
 const express = require('express');
 const cors = require('cors');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-const PizZip = require('pizzip');
-const Docxtemplater = require('docxtemplater');
 const fs = require('fs/promises');
 const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+const streamifier = require('streamifier');
+const cron = require('node-cron');
+
+
+// Librerías de documentos
+const PizZip = require('pizzip');
+const Docxtemplater = require('docxtemplater');
+const CloudConvert = require('cloudconvert');
 const cloudinary = require('cloudinary').v2;
-const CloudConvert = require('cloudconvert'); // Nueva dependencia para la conversión
+const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+
+// --- Inicialización del Servidor ---
+const WORDPRESS_DOMAIN = process.env.WORDPRESS_DOMAIN;
 
 const app = express();
 const port = process.env.PORT || 3000;
+(async () => {
+    await fs.mkdir(TEMP_PDF_PATH, { recursive: true });
+    await fs.mkdir(FINAL_PDF_PATH, { recursive: true });
+})();
+
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(cors({ origin: WORDPRESS_DOMAIN }));
 
 // =========================================================================
-// --- CONFIGURACIÓN IMPORTANTE ---
+// --- CONFIGURACIÓN GENERAL ---
 // =========================================================================
-const WORDPRESS_DOMAIN = 'https://cursos.ulalmexico.com';
-const INSCRIPTION_API_URL = 'http://74.208.116.21/webApi/api/InscriptionsOnline/Create';
-const DOCX_TEMPLATE_PATH = path.resolve(__dirname, 'contrato_template.docx');
+const CRON_SECRET = process.env.CRON_SECRET
 
-// --- Configuración de CloudConvert ---
-// ¡DEBES RELLENAR ESTO CON TU API KEY DE CLOUDCONVERT!
-CLOUDCONVERT_API_KEY='eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiMGJkZTc0MzQ0MTU0MzM0ZmEzZWFjNWM3YWVjNDQ1NmU4NjU2YmE4MjZjMWZiMmNhNzEzMWI2MGFjNjliYTI3MGNhOTc5ZTAxM2ViYWY0NjkiLCJpYXQiOjE3NTkxODI1MDIuNjA3MjEsIm5iZiI6MTc1OTE4MjUwMi42MDcyMTEsImV4cCI6NDkxNDg1NjEwMi42MDM4MTcsInN1YiI6IjczMDQ5MDAwIiwic2NvcGVzIjpbInVzZXIucmVhZCIsInVzZXIud3JpdGUiLCJ0YXNrLnJlYWQiLCJ0YXNrLndyaXRlIiwid2ViaG9vay5yZWFkIiwicHJlc2V0LnJlYWQiLCJ3ZWJob29rLndyaXRlIiwicHJlc2V0LndyaXRlIl19.dzbH_V1HRcztu9dpuLyUUYIttX6eMmIZJvRn15LBm3qOBSQa4AHqfrJNFAMfvZXrl2PV7H8zZGl3eFXVq0KwWWzIYuIJtrFqbg6PMMDoduan4mvt4Mb__9rju_N1BXpn6NebbKLppUjIlco0yxXsmva-p_iYosTvooYmIShI4W7BCKCNxuXzlM3glJ11xGLKfV2dEQapjprD6yJNr20Ci-Igc3Sp0VJw7oHpag5qse7SK8_ObeWFimSFfBoQOQPxAhF9Z4bMT1dvSRWrTKCniOfaTlzqGSchKDD2wxEq7VQYjUpEpDgqktXjhxtVtVgsDuymUqMi84XhSFmF7_f2yb2rmt-vmj2ueW7GbM0v8GV_fZvjil4vZ9WwEJ9isfpsNZ1WeAZRZqKYR1vQYuOKM-icvRILRS9FJHISWCDMafcDz3TsATtQhDL_1NLyVTTFoeJMA8BhUQh7DVldac0u2_y6QYySu9EuPKpgujCP-SzSr9v_SzBRNRfl9JmE95EthLt9zkN-qcCIFJD6O8Ke5fQeHBb863VepuWHFe9Rqm_XFqdPLttjV54l-fT5bPGKLnUefMMv60T05glhBgJ_RA-rmgOlAkrrUFY41ADNoL3M6XYdaGXI8zFv9ibnT85jKRVOf66YDUS5B2cBiOgniWmHR3nFFsbnqMMV4UU115I';
+const INSCRIPTION_API_URL = process.env.INSCRIPTION_API_URL;
+const DOCX_TEMPLATE_PATH = path.resolve(__dirname, 'resources' , 'contrato_template.docx');
+const AUTOMATIC_SIGNATURE_PATH = path.resolve(__dirname, 'resources' , 'firma_ulal.png'); 
+
+const CLOUDCONVERT_API_KEY = process.env.CLOUDCONVERT_API_KEY; 
 const cloudConvert = new CloudConvert(CLOUDCONVERT_API_KEY);
 
-// --- Configuración de Cloudinary (ACTUALIZADA) ---
 cloudinary.config({ 
-  cloud_name: 'dsvopdjag', 
-  api_key: '466177364661179', 
-  api_secret: 'day8VRwm764EhnakK5Gn0J5zvYE' 
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
+  api_key: process.env.CLOUDINARY_API_KEY, 
+  api_secret: process.env.CLOUDINARY_API_SECRET 
 });
 
 // --- Configuración de Evolution API (WhatsApp) ---
-const EVOLUTION_API_URL = 'https://wasap-evolution-api.hdwudh.easypanel.host';
-const EVOLUTION_INSTANCE_NAME = 'ulal-agenda';
-const EVOLUTION_API_KEY = 'B4EC9047E4F6-41CE-B777-EEA592F360BC';
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL;
+const EVOLUTION_INSTANCE_NAME = process.env.EVOLUTION_INSTANCE_NAME;
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
+
+// --- Rutas de Almacenamiento ---
+const TEMP_PDF_PATH = path.resolve(__dirname, 'temp_pdfs');
+const FINAL_PDF_PATH = path.resolve(__dirname, 'final_pdfs');
+
+// --- Ubicaciones para las Firmas y Fechas en cada página ---
+const USER_SIGNATURE_WIDTH = 203;
+const USER_SIGNATURE_HEIGHT = 60;
+const USER_SIGNATURE_LOCATIONS = [
+    { page: 0, sigX: 110, sigY: 80, dateX: 110, dateY: 60 },
+    { page: 1, sigX: 110, sigY: 70, dateX: 110, dateY: 50 },
+    { page: 2, sigX: 110, sigY: 100, dateX: 110, dateY: 80 },
+    { page: 3, sigX: 110, sigY: 90,  dateX: 110, dateY: 80 },
+    { page: 4, sigX: 110, sigY: 165, dateX: 110, dateY: 130 },
+    { page: 5, sigX: 130, sigY: 110, dateX: 130, dateY: 90 },
+    { page: 6, sigX: 110, sigY: 140, dateX: 110, dateY: 90 },
+    { page: 7, sigX: 120, sigY: 115, dateX: 110, dateY: 90 }
+];
+
+// --- NUEVO: Coordenadas de la Firma Automática ---
+const AUTOMATIC_SIGNATURE_WIDTH = 203; // Puedes ajustar el tamaño si es diferente
+const AUTOMATIC_SIGNATURE_HEIGHT = 60;
+const AUTOMATIC_SIGNATURE_LOCATIONS = [
+    { page: 0, sigX: 340, sigY: 80, textX: 340, textY: 60 },
+    { page: 1, sigX: 340, sigY: 70, textX: 340, textY: 50 },
+    { page: 2, sigX: 340, sigY: 100, textX: 340, textY: 80 },
+    { page: 3, sigX: 340, sigY: 90, textX: 340, textY: 80 },
+    { page: 4, sigX: 340, sigY: 165, textX: 340, textY: 130 },
+    { page: 5, sigX: 360, sigY: 110, textX: 360, textY: 90 },
+    { page: 6, sigX: 340, sigY: 140, textX: 340, textY: 90 },
+    { page: 7, sigX: 350, sigY: 115, textX: 340, textY: 90 }
+];
 // =========================================================================
 
-app.use(cors({ origin: WORDPRESS_DOMAIN }));
-app.use(express.json());
 
-// --- Función para formatear fechas ---
+// --- Funciones Auxiliares ---
+
 const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString + 'T00:00:00');
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
 };
 
-// --- FUNCIÓN ACTUALIZADA: Solo genera el buffer del DOCX ---
-async function createDocxBuffer(data) {
+const sendWhatsAppMessage = async (number, message) => {
+    if (!number) {
+        console.error("No se proporcionó número para enviar WhatsApp.");
+        return;
+    }
+    const jid = `521${number}@s.whatsapp.net`;
+    try {
+        await fetch(`${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE_NAME}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
+            body: JSON.stringify({ number: jid, options: { delay: 1200 }, text: message })
+        });
+    } catch (e) {
+        console.error(`Fallo al enviar WhatsApp a ${jid}: ${e.toString()}`);
+    }
+};
+
+const sendWhatsAppPdfWithUrl = async (number, pdfUrl, fileName) => {
+    if (!number) {
+        console.error("No se proporcionó número para enviar el PDF por WhatsApp.");
+        return;
+    }
+    const jid = `521${number}@s.whatsapp.net`;
+    try {
+        await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE_NAME}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
+            body: JSON.stringify({ number: jid, options: { delay: 1200 }, mediatype: 'document', media: pdfUrl, fileName: fileName })
+        });
+    } catch (e) {
+        console.error(`Fallo al enviar PDF por WhatsApp a ${jid}: ${e.toString()}`);
+    }
+};
+
+async function clearDirectory(directoryPath) {
+    try {
+        const files = await fs.readdir(directoryPath);
+        if (files.length === 0) {
+            console.log(`[Cron Cleanup] Directorio ya está vacío: ${directoryPath}`);
+            return { deleted_count: 0, directory: path.basename(directoryPath) };
+        }
+        const unlinkPromises = files.map(file => fs.unlink(path.join(directoryPath, file)));
+        await Promise.all(unlinkPromises);
+        console.log(`[Cron Cleanup] Se eliminaron ${files.length} archivos de: ${directoryPath}`);
+        return { deleted_count: files.length, directory: path.basename(directoryPath) };
+    } catch (err) {
+        if (err.code !== 'ENOENT') { // ENOENT = Directorio no encontrado (lo cual está bien)
+            console.error(`[Cron Cleanup] Error al limpiar el directorio ${directoryPath}:`, err);
+        }
+        return { deleted_count: 0, directory: path.basename(directoryPath) };
+    }
+}
+
+// --- Funciones de Procesamiento de Documentos ---
+
+const createDocxBuffer = async (data) => {
     const now = new Date();
     const termDate = new Date();
     termDate.setMonth(now.getMonth() + 4);
@@ -58,7 +162,7 @@ async function createDocxBuffer(data) {
     
     const placeholders = {
         '1': data.socialNetwork || 'N/A', '3': data.firstName, '4': data.lastName,
-        '5': data.lastNameMother, '6': formatDate(data.dateBirth), '7': data.age.toString(),
+        '5': data.lastNameMother, '6': formatDate(data.dateBirth), '7': data.age ? data.age.toString() : '',
         '8': data.placeBirth, '9': data.levelEducation, '10': data.lastSchool,
         '11': data.curp, '12': data.phone, '13': data.phoneFamily,
         '14': data.phoneOther, '15': data.email,
@@ -70,130 +174,44 @@ async function createDocxBuffer(data) {
     const content = await fs.readFile(DOCX_TEMPLATE_PATH);
     const zip = new PizZip(content);
     const doc = new Docxtemplater(zip, { delimiters: { start: '@', end: '@' }, paragraphLoop: true, linebreaks: true });
-    
-    try {
-        doc.render(placeholders);
-    } catch (error) {
-        throw new Error(`Error de Docxtemplater: ${error.message}. Revisa tus placeholders @X@.`);
-    }
-
+    doc.render(placeholders);
     return doc.getZip().generate({ type: 'nodebuffer' });
-}
+};
 
-// --- NUEVA FUNCIÓN: Convierte el DOCX a PDF usando la API de CloudConvert ---
 async function convertDocxToPdfViaApi(docxBuffer) {
-    console.log('Iniciando trabajo de conversión en CloudConvert...');
+    console.log('Iniciando conversión a PDF en CloudConvert...');
     let job = await cloudConvert.jobs.create({
-        tasks: {
-            'import-docx': {
-                operation: 'import/upload'
-            },
-            'convert-to-pdf': {
-                operation: 'convert',
-                input: 'import-docx',
-                output_format: 'pdf',
-                engine: 'libreoffice',
-            },
-            'export-pdf': {
-                operation: 'export/url',
-                input: 'convert-to-pdf',
-                inline: false,
-            }
-        }
+        tasks: { 'import-docx': { operation: 'import/upload' }, 'convert-to-pdf': { operation: 'convert', input: 'import-docx', output_format: 'pdf' }, 'export-pdf': { operation: 'export/url', input: 'convert-to-pdf' } }
     });
-
     const uploadTask = job.tasks.find(task => task.name === 'import-docx');
     await cloudConvert.tasks.upload(uploadTask, docxBuffer, 'contrato.docx');
-    
     job = await cloudConvert.jobs.wait(job.id);
-    
     const exportTask = job.tasks.find(task => task.name === 'export-pdf' && task.status === 'finished');
     if (!exportTask || !exportTask.result.files) {
         throw new Error('La exportación del PDF desde CloudConvert falló.');
     }
-    
-    const pdfUrl = exportTask.result.files[0].url;
-    console.log('PDF convertido y disponible en:', pdfUrl);
-    return pdfUrl;
+    return exportTask.result.files[0].url;
 }
 
-// --- Función para subir el PDF a Cloudinary ---
-async function uploadPdfToCloudinary(pdfUrl, fileName) {
-     const uploadResult = await cloudinary.uploader.upload(pdfUrl, {
-        resource_type: 'raw', // 'raw' es mejor para PDFs en Cloudinary
-        public_id: fileName,
-        folder: 'contratos',
+async function uploadPdfToCloudinary(pdfBuffer, fileName) {
+    console.log('Subiendo PDF a Cloudinary desde buffer...');
+    return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream({ resource_type: 'raw', public_id: fileName, folder: 'contratos' }, (error, result) => {
+            if (error) return reject(error);
+            resolve(result);
+        });
+        streamifier.createReadStream(pdfBuffer).pipe(uploadStream);
     });
-    return uploadResult;
 }
 
-// --- Función para enviar PDF por WhatsApp (usando URL) ---
-async function sendWhatsAppPdfWithUrl(number, pdfUrl, fileName) {
-    const url = `${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE_NAME}`;
-    const jid = `521${number}@s.whatsapp.net`;
+// =========================================================================
+// --- RUTAS DE LA APLICACIÓN ---
+// =========================================================================
 
-    const payload = {
-        number: jid,
-        options: { delay: 1200 },
-        mediatype: 'document',
-        media: pdfUrl,
-        fileName: fileName
-    };
-
-    try {
-        console.log(`Enviando URL de PDF a ${jid}: ${pdfUrl}`);
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
-            body: JSON.stringify(payload),
-            timeout: 30000 
-        });
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(` -> Error al enviar URL de PDF a ${jid}. Código: ${response.status}. Respuesta: ${errorText}`);
-        } else {
-            console.log(` -> URL de PDF a ${jid} encolada para envío.`);
-        }
-    } catch (e) {
-        console.error(` -> Fallo crítico al enviar URL de PDF a ${jid}. Error: ${e.toString()}`);
-    }
-}
-
-// --- Función para enviar texto por WhatsApp ---
-async function sendWhatsAppMessage(number, message) {
-    const url = `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE_NAME}`;
-    const jid = `521${number}@s.whatsapp.net`;
-    const payload = { 
-        number: jid, 
-        options: { delay: 1200 }, 
-        text: message 
-    };
-    
-    try {
-        console.log(`Enviando texto a ${jid}...`);
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
-            body: JSON.stringify(payload),
-            timeout: 10000
-        });
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(` -> Error al enviar texto a ${jid}. Código: ${response.status}. Respuesta: ${errorText}`);
-        } else {
-            console.log(` -> Texto a ${jid} encolado para envío.`);
-        }
-    } catch (e) {
-        console.error(` -> Fallo crítico al enviar texto a ${jid}. Error: ${e.toString()}`);
-    }
-}
-
-// --- Ruta Principal del Proxy ---
 app.post('/api/inscribe', async (req, res) => {
-    console.log('Petición recibida:', req.body);
+    console.log('Petición de inscripción recibida...');
     const incomingData = req.body;
     try {
-        // Tarea 1: Enviar inscripción al sistema interno
         fetch(INSCRIPTION_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -211,34 +229,151 @@ app.post('/api/inscribe', async (req, res) => {
             if (!response.ok) console.error(`Error en API de inscripción: ${response.statusText}`);
             else console.log('Inscripción enviada al sistema interno.');
         }).catch(err => console.error('Error al enviar a API de inscripción:', err));
-
-        // Tarea 2: Generar el buffer del DOCX rellenado
-        console.log('Generando contrato desde plantilla DOCX...');
+        // Tarea 1: Rellenar plantilla DOCX
         const docxBuffer = await createDocxBuffer(incomingData);
-        
-        // Tarea 3: Convertir el DOCX a PDF usando la API de CloudConvert
+
+        // Tarea 2: Convertir a PDF usando CloudConvert
         const tempPdfUrl = await convertDocxToPdfViaApi(docxBuffer);
+        
+        // Tarea 3: Descargar el PDF convertido para guardarlo temporalmente
+        const pdfResponse = await fetch(tempPdfUrl);
+        if (!pdfResponse.ok) throw new Error(`Error al descargar el PDF de CloudConvert: ${pdfResponse.statusText}`);
+        const pdfBuffer = await pdfResponse.buffer();
 
-        // Tarea 4: Subir el PDF desde la URL temporal a Cloudinary
-        console.log('Subiendo PDF a Cloudinary...');
-        const fileName = `Contrato-ULAL-${incomingData.firstName}-${Date.now()}.pdf`;
-        const uploadResult = await uploadPdfToCloudinary(tempPdfUrl, fileName);
-        const cloudinaryUrl = uploadResult.secure_url;
-        console.log(`PDF subido con éxito a: ${cloudinaryUrl}`);
+        // Tarea 4: Guardar PDF temporal y datos del usuario
+        const docId = uuidv4();
+        await fs.writeFile(path.join(TEMP_PDF_PATH, `${docId}.pdf`), pdfBuffer);
+        const userInfo = { phone: incomingData.phone, name: incomingData.firstName };
+        await fs.writeFile(path.join(TEMP_PDF_PATH, `${docId}.json`), JSON.stringify(userInfo));
+        
+        // Tarea 5: Generar y enviar enlace de firma
+        // IMPORTANTE: Cambia 'localhost:3000' por tu dominio o IP pública para que el enlace funcione fuera de tu servidor.
+        const signingUrl = `https://data-methods-connecticut-trips.trycloudflare.com/sign/${docId}`; 
+        const signingMessage = `¡Hola ${incomingData.firstName}!👋 Bienvenido a Universidad En Línea América Latina🧑‍🎓 \nPor favor, firma tu contrato de inscripción en el siguiente enlace:👇👇\n\n${signingUrl}`;
+        await sendWhatsAppMessage(incomingData.phone, signingMessage);
 
-        // Tarea 5: Enviar por WhatsApp
-        const whatsappMessage = `¡Hola ${incomingData.firstName}! Gracias por inscribirte. Adjunto encontrarás una copia de tu solicitud de inscripción.`;
-        await sendWhatsAppMessage(incomingData.phone, whatsappMessage);
-        await sendWhatsAppPdfWithUrl(incomingData.phone, cloudinaryUrl, fileName);
+        console.log(`Proceso iniciado. Enlace de firma generado: ${signingUrl}`);
+        res.status(200).json({ message: 'Enlace de firma generado y enviado correctamente.' });
 
-        res.status(200).json({ message: 'Inscripción procesada. Se ha enviado una copia del contrato a tu WhatsApp.' });
     } catch (error) {
-        console.error('Error en el proxy:', error.message);
+        console.error('Error en /api/inscribe:', error);
         res.status(500).json({ error: 'Hubo un error al procesar la solicitud.', details: error.message });
     }
 });
-
-app.listen(port, () => {
-    console.log(`Servidor proxy escuchando en el puerto ${port}`);
+app.get('/sign/:id', (req, res) => {
+    res.sendFile(path.resolve(__dirname, 'public' , 'signing.html'));
 });
+app.get('/pdf/:id', async (req, res) => {
+    const docId = req.params.id;
+    const filePath = path.join(TEMP_PDF_PATH, `${docId}.pdf`);
+    try {
+        await fs.access(filePath);
+        res.sendFile(filePath);
+    } catch {
+        res.status(404).send('Documento no encontrado o ya ha sido firmado.');
+    }
+});
+app.post('/api/finalize-signature', async (req, res) => {
+    const { docId, signatureImage } = req.body;
+    console.log(`Finalizando firma para el documento: ${docId}`);
+    try {
+        // --- Cargar todos los recursos ---
+        const unsignedPdfPath = path.join(TEMP_PDF_PATH, `${docId}.pdf`);
+        const userInfoPath = path.join(TEMP_PDF_PATH, `${docId}.json`);
+        const pdfBuffer = await fs.readFile(unsignedPdfPath);
+        const userInfo = JSON.parse(await fs.readFile(userInfoPath, 'utf8'));
+        // Firma del usuario (dibujada)
+        const userSignatureBuffer = Buffer.from(signatureImage.split('base64,')[1], 'base64');
+        
+        // Firma automática (desde archivo)
+        const automaticSignatureBuffer = await fs.readFile(AUTOMATIC_SIGNATURE_PATH);
+        
+        const pdfDoc = await PDFDocument.load(pdfBuffer);
+        const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        const pages = pdfDoc.getPages();
 
+        // Incrustar ambas imágenes de firma en el documento
+        const userSignatureEmbed = await pdfDoc.embedPng(userSignatureBuffer);
+        const automaticSignatureEmbed = await pdfDoc.embedPng(automaticSignatureBuffer);
+
+        // --- Estampar Firma del Usuario y Fecha ---
+        const today = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
+        for (const loc of USER_SIGNATURE_LOCATIONS) {
+            if (loc.page < pages.length) {
+                const page = pages[loc.page];
+                page.drawImage(userSignatureEmbed, {
+                    x: loc.sigX, y: loc.sigY,
+                    width: USER_SIGNATURE_WIDTH, height: USER_SIGNATURE_HEIGHT,
+                });
+                page.drawText(`Firmado el: ${today}`, {
+                    x: loc.dateX, y: loc.dateY,
+                    font: helveticaFont, size: 8, color: rgb(0.1, 0.1, 0.1),
+                });
+            }
+        }
+        
+        // --- NUEVO: Estampar Firma Automática y Leyenda ---
+        const legend = "Inscripción Automática en Plataforma";
+        for (const loc of AUTOMATIC_SIGNATURE_LOCATIONS) {
+            if (loc.page < pages.length) {
+                const page = pages[loc.page];
+                page.drawImage(automaticSignatureEmbed, {
+                    x: loc.sigX, y: loc.sigY,
+                    width: AUTOMATIC_SIGNATURE_WIDTH, height: AUTOMATIC_SIGNATURE_HEIGHT,
+                });
+                page.drawText(legend, {
+                    x: loc.textX, y: loc.textY,
+                    font: helveticaFont, size: 8, color: rgb(0.1, 0.1, 0.1),
+                });
+            }
+        }
+
+        // --- Guardar y finalizar ---
+        const finalFileName = `contrato-firmado-${userInfo.name.replace(/\s+/g, '-')}-${docId.substring(0, 8)}.pdf`;
+        const finalPdfBytes = await pdfDoc.save();
+        const finalPdfPath = path.join(FINAL_PDF_PATH, `contrato-firmado-${docId}.pdf`);
+        await fs.writeFile(finalPdfPath, finalPdfBytes);
+        await fs.unlink(unsignedPdfPath);
+        // Subir a Cloudinary
+        const uploadResult = await uploadPdfToCloudinary(finalPdfBytes, finalFileName);
+        console.log(`PDF firmado subido a Cloudinary: ${uploadResult.secure_url}`);
+
+        // Enviar copia final por WhatsApp
+        await sendWhatsAppMessage(userInfo.phone, `¡Gracias ${userInfo.name}!🤗 Tu contrato ha sido firmado. Te adjuntamos una copia.📝👇`);
+        await sendWhatsAppPdfWithUrl(userInfo.phone, uploadResult.secure_url, finalFileName);
+        
+        res.status(200).json({ message: '¡Documento firmado con éxito! Se ha enviado una copia por WhatsApp.' });
+        console.log(`Documento ${docId} firmado con ambas firmas y guardado.`);
+        res.status(200).json({ message: '¡Documento firmado con éxito!' });
+
+    } catch (error) {
+        console.error('Error en /api/finalize-signature:', error);
+        res.status(500).json({ error: 'No se pudo procesar y guardar la firma.' });
+    }
+});
+app.get('/api/cron/clear-folders', async (req, res) => {
+    // 1. Proteger la ruta
+    if (req.headers['authorization'] !== `Bearer ${CRON_SECRET}`) {
+        return res.status(401).json({ message: 'No autorizado' });
+    }
+
+    console.log('[Vercel Cron] Ejecutando tarea de limpieza diaria de directorios locales...');
+    
+    try {
+        const results = await Promise.all([
+            clearDirectory(TEMP_PDF_PATH),
+            clearDirectory(FINAL_PDF_PATH)
+        ]);
+
+        console.log('[Vercel Cron] Tarea de limpieza finalizada.');
+        res.status(200).json({ success: true, results });
+
+    } catch (error) {
+        console.error('[Vercel Cron] Error en la tarea de limpieza:', error);
+        res.status(500).json({ success: false, message: 'Error durante la limpieza.' });
+    }
+});
+// --- Iniciar Servidor ---
+app.listen(port, () => {
+    console.log(`Servidor de firma escuchando en http://localhost:${port}`);
+});

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firmar Documento</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        #pdf-viewer { border: 1px solid #ccc; margin-bottom: 20px; max-width: 90%; width: 800px; }
+        #signature-pad { border: 2px dashed #007bff; cursor: crosshair; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; margin: 5px; border: none; border-radius: 5px; transition: background-color 0.2s; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        #clear-btn { background-color: #ffc107; }
+        #submit-btn { background-color: #28a745; color: white; display: flex; align-items: center; justify-content: center; }
+
+        /* --- NUEVO: Estilos para el Spinner --- */
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Revisa y Firma tu Contrato</h1>
+    <h2>El espacio para la firma se encuentra al final de la página, por favor lee detenidamente todo el contenido</h2>
+    <div id="pdf-viewer"></div>
+    
+    <h2>Dibuja tu firma en el recuadro:</h2>
+    <canvas id="signature-pad" width="400" height="200"></canvas>
+    <div>
+        <button id="clear-btn">Limpiar</button>
+        <button id="submit-btn">
+            <span class="button-text">Firmar y Enviar</span>
+        </button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+
+    <script>
+        // Configuración de PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.worker.min.js`;
+
+        const docId = window.location.pathname.split('/').pop();
+        const pdfUrl = `/pdf/${docId}`;
+        const viewerContainer = document.getElementById('pdf-viewer');
+
+        // Renderizar el PDF
+        pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                pdf.getPage(pageNum).then(page => {
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    viewerContainer.appendChild(canvas);
+                    page.render({ canvasContext: context, viewport: viewport });
+                });
+            }
+        });
+
+        // Configuración de Signature Pad
+        const signaturePadCanvas = document.getElementById('signature-pad');
+        const signaturePad = new SignaturePad(signaturePadCanvas);
+        
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            signaturePad.clear();
+        });
+        
+        // --- LÓGICA DEL BOTÓN DE ENVÍO ACTUALIZADA ---
+        document.getElementById('submit-btn').addEventListener('click', () => {
+            if (signaturePad.isEmpty()) {
+                return alert("Por favor, provee una firma.");
+            }
+
+            const submitBtn = document.getElementById('submit-btn');
+            const clearBtn = document.getElementById('clear-btn');
+            const buttonText = submitBtn.querySelector('.button-text');
+            const originalButtonText = buttonText.textContent;
+
+            // 1. Desactivar botones
+            submitBtn.disabled = true;
+            clearBtn.disabled = true;
+
+            // 2. Mostrar spinner y texto de "Procesando"
+            submitBtn.innerHTML = `<div class="spinner"></div><span>Procesando...</span>`;
+
+            const signatureImage = signaturePad.toDataURL('image/png');
+            
+            fetch('/api/finalize-signature', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ docId: docId, signatureImage: signatureImage })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // Si la respuesta del servidor es un error (ej. 500), lo lanzamos para que lo capture el .catch()
+                    return response.json().then(err => { throw new Error(err.message || 'Error del servidor') });
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Si todo sale bien, se reemplaza el contenido de la página
+                alert(data.message);
+                document.body.innerHTML = `<h1>¡Gracias! Tu documento ha sido firmado.</h1><h2>Recibirás una copia por WhatsApp en unos momentos.</h2>`;
+            })
+            .catch(err => {
+                // 3. Si hay un error, se reactivan los botones y se restaura el texto
+                alert("Hubo un error al enviar la firma. Por favor, inténtalo de nuevo.");
+                console.error(err);
+
+                submitBtn.disabled = false;
+                clearBtn.disabled = false;
+                submitBtn.innerHTML = `<span class="button-text">${originalButtonText}</span>`;
+            });
+        });
+    </script>
+</body>
+</html>
