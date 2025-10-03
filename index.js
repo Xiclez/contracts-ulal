@@ -3,22 +3,22 @@
 // =========================================================================
 
 // --- Dependencias ---
-const express = require('express');
-const cors = require('cors');
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-const fs = require('fs/promises');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
-const streamifier = require('streamifier');
-const cron = require('node-cron');
-
+import express from 'express';
+import cors from 'cors';
+import fetch from 'node-fetch';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url'; 
+import { v4 as uuidv4 } from 'uuid';
+import streamifier from 'streamifier';
+import cron from 'node-cron';
 
 // Librerías de documentos
-const PizZip = require('pizzip');
-const Docxtemplater = require('docxtemplater');
-const CloudConvert = require('cloudconvert');
-const cloudinary = require('cloudinary').v2;
-const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+import PizZip from 'pizzip';
+import Docxtemplater from 'docxtemplater';
+import CloudConvert from 'cloudconvert';
+import { v2 as cloudinary } from 'cloudinary'; 
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 // --- Inicialización del Servidor ---
 const WORDPRESS_DOMAIN = process.env.WORDPRESS_DOMAIN;
@@ -248,7 +248,7 @@ app.post('/api/inscribe', async (req, res) => {
         
         // Tarea 5: Generar y enviar enlace de firma
         // IMPORTANTE: Cambia 'localhost:3000' por tu dominio o IP pública para que el enlace funcione fuera de tu servidor.
-        const signingUrl = `https://data-methods-connecticut-trips.trycloudflare.com/sign/${docId}`; 
+        const signingUrl = `https://contracts-ulal.vercel.app/sign/${docId}`; 
         const signingMessage = `¡Hola ${incomingData.firstName}!👋 Bienvenido a Universidad En Línea América Latina🧑‍🎓 \nPor favor, firma tu contrato de inscripción en el siguiente enlace:👇👇\n\n${signingUrl}`;
         await sendWhatsAppMessage(incomingData.phone, signingMessage);
 
