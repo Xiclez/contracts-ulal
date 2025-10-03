@@ -8,7 +8,8 @@ import cors from 'cors';
 import fetch from 'node-fetch';
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url'; 
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import streamifier from 'streamifier';
 import cron from 'node-cron';
@@ -19,6 +20,10 @@ import Docxtemplater from 'docxtemplater';
 import CloudConvert from 'cloudconvert';
 import { v2 as cloudinary } from 'cloudinary'; 
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+
+// --- FIX: Crear __dirname para módulos ES ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // --- Inicialización del Servidor ---
 const WORDPRESS_DOMAIN = process.env.WORDPRESS_DOMAIN;
