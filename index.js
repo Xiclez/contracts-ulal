@@ -98,7 +98,7 @@ app.post('/api/inscribe', async (req, res) => {
         const protocol = req.headers['x-forwarded-proto'] || 'http';
         const signingUrl = `${protocol}://${host}/sign/${docId}?${queryParams}`;
 
-        await sendWhatsAppMessage(incomingData.phone, `¡Hola ${incomingData.firstName}! Por favor, firma tu contrato de inscripción aquí: ${signingUrl}`);
+        await sendWhatsAppMessage(incomingData.phone, `¡Hola ${incomingData.firstName}! Bienvenido a Universidad En Línea América Latina! 🧑‍🎓📚 \nPor favor, firma tu contrato de inscripción aquí:👇👇\n${signingUrl}`);
         res.status(200).json({ message: 'Enlace de firma generado y enviado.' });
     } catch (error) {
         console.error('Error en /api/inscribe:', error);
@@ -169,7 +169,7 @@ app.post('/api/finalize-signature', async (req, res) => {
         
         await cloudinary.uploader.destroy(`contratos/${docId}`, { resource_type: 'raw' });
 
-        await sendWhatsAppMessage(phone, `¡Gracias ${name}! Tu contrato ha sido firmado. Te adjuntamos una copia.`);
+        await sendWhatsAppMessage(phone, `¡Gracias ${name}! Tu contrato ha sido firmado.🤗 \nTe adjuntamos una copia.👇📝`);
         await sendWhatsAppPdfWithUrl(phone, uploadResult.secure_url, finalFileName);
         
         res.status(200).json({ message: '¡Documento firmado con éxito!' });
