@@ -11,6 +11,46 @@ import Docxtemplater from 'docxtemplater';
 import CloudConvert from 'cloudconvert';
 import { v2 as cloudinary } from 'cloudinary';
 
+import 'dotenv/config';
+
+export const ftpConfig = {
+    host: process.env.FTP_HOST,
+    user: process.env.FTP_USER,
+    password: process.env.FTP_PASSWORD,
+    port: process.env.FTP_PORT,
+    secure: false // Usar 'true' si es FTPS
+};
+
+export const basePublicUrl = process.env.FTP_BASE_URL;
+export const ftpBasePath = process.env.FTP_BASE_PATH;
+export const imageDirs = [
+    `${ftpBasePath}2025/04`,
+    `${ftpBasePath}2025/07`,
+    `${ftpBasePath}2025/08`,
+    `${ftpBasePath}2025/09`,
+    `${ftpBasePath}2025/10`,
+];
+export const videoDir = `${ftpBasePath}2025/05`;
+
+// --- HELPERS ---
+
+// Función para obtener las dimensiones desde el nombre de archivo (ej: 'foto-1024x768.jpg')
+export function getDimensionsFromFilename(filename) {
+    const match = filename.match(/-(\d+)[xX](\d+)\.[a-zA-Z]{3,4}$/);
+    if (match) {
+        return { width: parseInt(match[1], 10), height: parseInt(match[2], 10) };
+    }
+    return null;
+}
+
+// Función para mezclar un array
+export function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+
 // --- Creación de __dirname para módulos ES ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

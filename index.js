@@ -10,6 +10,7 @@ import { dirname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { v2 as cloudinary } from 'cloudinary';
+import ftp from 'basic-ftp';
 
 // --- Importamos TODAS las funciones y configuraciones desde nuestro archivo de utilidades ---
 import {
@@ -27,7 +28,14 @@ import {
     convertDocxToPdfViaApi,
     uploadPdfToCloudinary,
     sendWhatsAppMessage,
-    sendWhatsAppPdfWithUrl
+    sendWhatsAppPdfWithUrl,
+    ftpConfig,
+    basePublicUrl,
+    ftpBasePath,
+    imageDirs,
+    videoDir,
+    getDimensionsFromFilename,
+    shuffleArray
 } from './utils/functions.js';
 
 // --- Creación de __dirname para módulos ES ---
@@ -37,7 +45,7 @@ const __dirname = dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors({ origin: WORDPRESS_DOMAIN }));
+app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 // =========================================================================
@@ -176,6 +184,87 @@ app.post('/api/finalize-signature', async (req, res) => {
     } catch (error) {
         console.error('Error en /api/finalize-signature:', error);
         res.status(500).json({ error: 'No se pudo procesar la firma.' });
+    }
+});
+
+app.get('/get-media', async (req, res) => {
+    const client = new ftp.Client();
+    client.ftp.verbose = false;
+
+    try {
+        console.log("Conectando al servidor FTP...");
+        await client.access(ftpConfig);
+        console.log("Conexión FTP exitosa.");
+
+        // --- PROCESAR IMÁGENES ---
+        console.log("Obteniendo lista de imágenes...");
+        const allImageFullPaths = [];
+        for (const dir of imageDirs) {
+            console.log(`- Escaneando: ${dir}`);
+            const filesInDir = await client.list(dir);
+            for (const file of filesInDir) {
+                // Se construye la ruta completa manualmente para asegurar que es correcta
+                allImageFullPaths.push(`${dir}/${file.name}`);
+            }
+        }
+        
+        console.log("Procesando imágenes para encontrar las de mayor resolución...");
+        const groupedImages = {};
+        for (const fullPath of allImageFullPaths) {
+            const filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
+            const dimensions = getDimensionsFromFilename(filename);
+
+            if (dimensions) {
+                const baseName = filename.replace(/-(\d+)[xX](\d+)\.[a-zA-Z]{3,4}$/, '');
+                const area = dimensions.width * dimensions.height;
+
+                if (!groupedImages[baseName] || area > groupedImages[baseName].area) {
+                    // Se crea la URL pública a partir de la ruta completa
+                    const relativePath = fullPath.replace(ftpBasePath, '');
+                    groupedImages[baseName] = {
+                        url: `${basePublicUrl}${relativePath}`,
+                        area: area
+                    };
+                }
+            }
+        }
+        const finalImageList = Object.values(groupedImages).map(group => group.url);
+        console.log(`Encontradas ${finalImageList.length} imágenes únicas de máxima resolución.`);
+
+        // --- PROCESAR VIDEOS ---
+        console.log("Obteniendo lista de videos...");
+        const videoFiles = await client.list(videoDir);
+        const finalVideoList = videoFiles
+            .filter(file => file.name.toLowerCase().endsWith('.mp4'))
+            .map(file => {
+                // Se construye la ruta completa manualmente para asegurar que es correcta
+                const fullPath = `${videoDir}/${file.name}`;
+                const relativePath = fullPath.replace(ftpBasePath, '');
+                return `${basePublicUrl}${relativePath}`;
+            });
+        console.log(`Encontrados ${finalVideoList.length} videos.`);
+
+        // --- SELECCIÓN ALEATORIA Y RESPUESTA FINAL ---
+        shuffleArray(finalImageList);
+        shuffleArray(finalVideoList);
+
+        const selectedImages = finalImageList.slice(0, 15);
+        const selectedVideos = finalVideoList.slice(0, 15);
+
+        let finalMedia = [...selectedImages, ...selectedVideos];
+        shuffleArray(finalMedia);
+
+        console.log(`Enviando ${finalMedia.length} medios al cliente. ✨`);
+        res.json(finalMedia);
+
+    } catch (err) {
+        console.error("Error en la operación FTP:", err);
+        res.status(500).json({ error: "No se pudo conectar o procesar los archivos del servidor FTP." });
+    } finally {
+        if (!client.closed) {
+            console.log("Cerrando conexión FTP.");
+            client.close();
+        }
     }
 });
 
