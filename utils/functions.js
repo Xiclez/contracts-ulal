@@ -10,8 +10,36 @@ import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import CloudConvert from 'cloudconvert';
 import { v2 as cloudinary } from 'cloudinary';
-
+import nodemailer from 'nodemailer';
+import mongoose from 'mongoose';
 import 'dotenv/config';
+
+const registroSchema = new mongoose.Schema({
+    nombre: { type: String, required: true },
+    apellido: { type: String, required: true },
+    whatsApp: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    nivel: { type: String, required: true },
+    fechaRegistro: { type: Date, default: Date.now }
+});
+
+export const Registro = mongoose.model('Registro', registroSchema);
+
+export const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+        type: 'OAuth2', // ¡Importante!
+        user: process.env.EMAIL_USER,
+        clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+        refreshToken: process.env.GOOGLE_OAUTH_REFRESH_TOKEN,
+    },
+     tls: {
+        rejectUnauthorized: false
+    }
+});
 
 export const ftpConfig = {
     host: process.env.FTP_HOST,

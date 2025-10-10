@@ -11,6 +11,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { v2 as cloudinary } from 'cloudinary';
 import ftp from 'basic-ftp';
+import mongoose from 'mongoose';
+import 'dotenv/config';
 
 // --- Importamos TODAS las funciones y configuraciones desde nuestro archivo de utilidades ---
 import {
@@ -35,8 +37,15 @@ import {
     imageDirs,
     videoDir,
     getDimensionsFromFilename,
-    shuffleArray
+    shuffleArray,
+    Registro,
+    transporter
 } from './utils/functions.js';
+
+// --- CONEXIÓN A MONGODB ---
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('✅ Conectado a MongoDB Atlas'))
+    .catch(err => console.error('❌ Error al conectar a MongoDB:', err));
 
 // --- Creación de __dirname para módulos ES ---
 const __filename = fileURLToPath(import.meta.url);
@@ -267,7 +276,81 @@ app.get('/get-media', async (req, res) => {
         }
     }
 });
+// --- ENDPOINT DE REGISTRO ---
+app.post('/api/registro', async (req, res) => {
+    try {
+        // 1. Obtenemos y validamos los datos del payload
+        const { nombre, apellido, whatsApp, email, nivel } = req.body;
 
+        if (!nombre || !apellido || !whatsApp || !email || !nivel) {
+            return res.status(400).json({ message: 'Faltan campos obligatorios en el payload.' });
+        }
+
+        // 2. Creamos el registro en MongoDB
+        const nuevoRegistro = new Registro({ nombre, apellido, whatsApp, email, nivel });
+        await nuevoRegistro.save();
+        console.log(`💾 Registro guardado para: ${email}`);
+
+        // --- Tareas asíncronas (no bloquean la respuesta al cliente) ---
+
+        // 3. Enviamos los mensajes de WhatsApp
+        const mensajeBienvenida = `¡Hola, ${nombre}! 👋 Gracias por registrarte. Tu nivel es: ${nivel}.`;
+        const pdfUrl = process.env.PDF_BIENVENIDA_URL;
+
+        sendWhatsAppMessage(whatsApp, mensajeBienvenida);
+        sendWhatsAppPdfWithUrl(whatsApp, pdfUrl, 'Documento de Bienvenida.pdf');
+        
+        // 4. Enviamos el correo electrónico de confirmación
+        const mailOptions = {
+    from: `"Cursos ULAL México" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: '✅ ¡Registro exitoso!',
+    html: `
+        <h1>¡Bienvenido, ${nombre} ${apellido}!</h1>
+        <p>Tu registro en nuestra plataforma ha sido completado exitosamente.</p>
+        <p>Estos son los datos que registraste:</p>
+        <ul>
+            <li><strong>Nombre:</strong> ${nombre} ${apellido}</li>
+            <li><strong>WhatsApp:</strong> ${whatsApp}</li>
+            <li><strong>Email:</strong> ${email}</li>
+            <li><strong>Nivel:</strong> ${nivel}</li>
+        </ul>
+        <p>Adjuntamos un documento con información importante para que comiences.</p>
+        <p>¡Gracias por unirte!</p>
+    `,
+    // --- SECCIÓN AÑADIDA PARA EL ARCHIVO ADJUNTO ---
+    attachments: [
+        {
+            filename: 'Documento de Bienvenida.pdf', // El nombre que verá el usuario
+            path: process.env.PDF_BIENVENIDA_URL,     // La URL pública del PDF
+            contentType: 'application/pdf'           // El tipo de archivo (opcional, pero recomendado)
+        }
+    ]
+};
+
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.error(`❌ Error al enviar email a ${email}:`, error);
+            } else {
+                console.log(`💌 Email enviado exitosamente a ${email}: ${info.response}`);
+            }
+        });
+        
+        // --- Respuesta exitosa ---
+        res.status(201).json({ 
+            message: 'Registro creado exitosamente. Se han enviado las notificaciones.',
+            data: nuevoRegistro 
+        });
+
+    } catch (error) {
+        // Manejo de errores (ej. email duplicado)
+        if (error.code === 11000) {
+            return res.status(409).json({ message: 'El correo electrónico ya está registrado.' });
+        }
+        console.error('🔥 Error en el endpoint /registro:', error);
+        res.status(500).json({ message: 'Ocurrió un error en el servidor.' });
+    }
+});
 // --- Exportar la app para Vercel ---
 export default app;
 
