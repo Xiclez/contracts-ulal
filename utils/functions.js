@@ -35,9 +35,6 @@ export const transporter = nodemailer.createTransport({
         clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
         clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
         refreshToken: process.env.GOOGLE_OAUTH_REFRESH_TOKEN,
-    },
-     tls: {
-        rejectUnauthorized: false
     }
 });
 
