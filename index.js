@@ -294,7 +294,7 @@ app.post('/api/registro', async (req, res) => {
         // --- Tareas asíncronas (no bloquean la respuesta al cliente) ---
 
         // 3. Enviamos los mensajes de WhatsApp
-        const mensajeBienvenida = `¡Hola, ${nombre}! 👋 Gracias por registrarte. Tu nivel es: ${nivel}.`;
+        const mensajeBienvenida = `¡Hola, ${nombre}! 👋 Gracias por registrarte. Tu nivel es: ${nivel}. Te invitamos a mirar nuestra guía completa de uso de la plataforma aqui: 👇👇👇 \n https://youtu.be/o17Ja8WUFXA`;
         const pdfUrl = process.env.PDF_BIENVENIDA_URL;
 
         sendWhatsAppMessage(whatsApp, mensajeBienvenida);
