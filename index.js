@@ -286,19 +286,17 @@ app.post('/api/registro', async (req, res) => {
             return res.status(400).json({ message: 'Faltan campos obligatorios en el payload.' });
         }
 
-        // 2. Creamos el registro en MongoDB
-        const nuevoRegistro = new Registro({ nombre, apellido, whatsApp, email, nivel });
-        await nuevoRegistro.save();
-        console.log(`💾 Registro guardado para: ${email}`);
-
-        // --- Tareas asíncronas (no bloquean la respuesta al cliente) ---
-
-        // 3. Enviamos los mensajes de WhatsApp
         const mensajeBienvenida = `¡Hola, ${nombre}! 👋 Gracias por registrarte. Tu nivel es: ${nivel}. Te invitamos a mirar nuestra guía completa de uso de la plataforma aqui: 👇👇👇 \n https://youtu.be/o17Ja8WUFXA`;
         const pdfUrl = process.env.PDF_BIENVENIDA_URL;
 
         sendWhatsAppMessage(whatsApp, mensajeBienvenida);
         sendWhatsAppPdfWithUrl(whatsApp, pdfUrl, 'Documento de Bienvenida.pdf');
+
+        // 2. Creamos el registro en MongoDB
+        const nuevoRegistro = new Registro({ nombre, apellido, whatsApp, email, nivel });
+        await nuevoRegistro.save();
+        console.log(`💾 Registro guardado para: ${email}`);
+
         
         // 4. Enviamos el correo electrónico de confirmación
         const mailOptions = {
