@@ -290,8 +290,12 @@ app.post('/api/registro', async (req, res) => {
         const pdfUrl = process.env.PDF_BIENVENIDA_URL;
 
         sendWhatsAppMessage(whatsApp, mensajeBienvenida);
+        if (nivel.toLowerCase() === 'licenciatura' || nivel.toLowerCase() === 'ingeniería') {
+            const pdfUrl2 = process.env.PDF_BIENVENIDA_URL2;
+            await sendWhatsAppPdfWithUrl(whatsApp, pdfUrl2, 'Bienvenida ULAL.pdf');
+        }else{
         sendWhatsAppPdfWithUrl(whatsApp, pdfUrl, 'Documento de Bienvenida.pdf');
-
+        }
         // 2. Creamos el registro en MongoDB
         const nuevoRegistro = new Registro({ nombre, apellido, whatsApp, email, nivel });
         await nuevoRegistro.save();
