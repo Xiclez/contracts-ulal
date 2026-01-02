@@ -145,7 +145,7 @@ export const formatDate = (dateString) => {
     const date = new Date(dateString + 'T00:00:00');
     return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
 };
-
+/*
 export const sendWhatsAppMessage = async (number, message) => {
     if (!number || !EVOLUTION_API_URL) return;
     const jid = `521${number}@s.whatsapp.net`;
@@ -159,7 +159,51 @@ export const sendWhatsAppMessage = async (number, message) => {
         console.error(`Fallo al enviar WhatsApp a ${jid}: ${e.toString()}`);
     }
 };
+*/
 
+export const sendWhatsAppMessage = async (number, message) => {
+    
+    // CONFIGURACIÓN:
+    // Esta es la URL de tu intermediario (el que acabamos de editar arriba)
+    // Ejemplo: 'https://api.tu-dominio.com' o 'http://tu-ip-publica:3000'
+    const INTERMEDIARY_URL = process.env.INTERMEDIARY_URL; 
+    
+    // La misma API KEY que definiste en el .env del intermediario (API_SECRET_KEY)
+    const API_KEY = process.env.INTERMEDIARY_API_KEY; 
+
+    if (!INTERMEDIARY_URL || !API_KEY) {
+        console.error("❌ Error: Faltan variables de entorno (INTERMEDIARY_URL o INTERMEDIARY_API_KEY)");
+        return;
+    }
+
+    // ESTRUCTURA DEL PAYLOAD
+    // Debe coincidir con lo que espera req.body en el server.js
+    const payload = {
+        phone: number,
+        message: message
+    };
+
+    try {
+        const response = await axios.post(
+            `${INTERMEDIARY_URL}/send-message`, // Apuntamos al nuevo endpoint
+            payload,
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': API_KEY // Autenticación con tu middleware verifyKey
+                }
+            }
+        );
+
+        console.log(`✅ Mensaje entregado al intermediario. Respuesta:`, response.data);
+        return true;
+
+    } catch (error) {
+        const errorMsg = error.response ? JSON.stringify(error.response.data) : error.message;
+        console.error(`❌ Error enviando mensaje al intermediario: ${errorMsg}`);
+        return false;
+    }
+};
 export const sendWhatsAppPdfWithUrl = async (number, pdfUrl, fileName) => {
     if (!number || !EVOLUTION_API_URL) return;
     const jid = `521${number}@s.whatsapp.net`;
