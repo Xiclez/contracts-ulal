@@ -205,16 +205,39 @@ export const sendWhatsAppMessage = async (number, message) => {
     }
 };
 export const sendWhatsAppPdfWithUrl = async (number, pdfUrl, fileName) => {
-    if (!number || !EVOLUTION_API_URL) return;
-    const jid = `521${number}@s.whatsapp.net`;
+    
+    // Configuración del Intermediario
+    const INTERMEDIARY_URL = process.env.INTERMEDIARY_URL; // Ej: https://mi-server-intermedio.com
+    const API_KEY = process.env.INTERMEDIARY_API_KEY;
+
+    if (!number || !INTERMEDIARY_URL) {
+        console.warn('⚠️ Faltan datos: número o URL del intermediario no definidos.');
+        return;
+    }
+
     try {
-        await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${EVOLUTION_INSTANCE_NAME}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
-            body: JSON.stringify({ number: jid, options: { delay: 1200 }, mediatype: 'document', media: pdfUrl, fileName: fileName })
-        });
+        // Payload para tu servidor intermediario
+        const payload = {
+            phone: number,
+            pdfUrl: pdfUrl,
+            fileName: fileName || 'documento.pdf' // Valor por defecto si no hay nombre
+        };
+
+        const config = {
+            headers: { 
+                'Content-Type': 'application/json', 
+                'x-api-key': API_KEY 
+            }
+        };
+
+        // Petición al endpoint /send-pdf que creamos en el paso 1
+        await axios.post(`${INTERMEDIARY_URL}/send-pdf`, payload, config);
+        
+        // console.log(`✅ Solicitud de PDF enviada para ${number}`);
+
     } catch (e) {
-        console.error(`Fallo al enviar PDF por WhatsApp a ${jid}: ${e.toString()}`);
+        const errorMsg = e.response ? JSON.stringify(e.response.data) : e.message;
+        console.error(`❌ Fallo al enviar PDF por WhatsApp a ${number}: ${errorMsg}`);
     }
 };
 
