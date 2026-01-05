@@ -13,7 +13,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import nodemailer from 'nodemailer';
 import mongoose from 'mongoose';
 import 'dotenv/config';
-
+import axios from 'axios';
 const registroSchema = new mongoose.Schema({
     nombre: { type: String, required: true },
     apellido: { type: String, required: true },
