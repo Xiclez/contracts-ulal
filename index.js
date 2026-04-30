@@ -286,17 +286,17 @@ app.post('/api/registro', async (req, res) => {
             return res.status(400).json({ message: 'Faltan campos obligatorios en el payload.' });
         }
 
-        const mensajeBienvenida = `¡Hola, ${nombre}! 👋 Gracias por registrarte. Tu nivel es: ${nivel}. Te invitamos a mirar nuestra guía completa de uso de la plataforma aqui: 👇👇👇 \n https://youtu.be/o17Ja8WUFXA`;
+        /*const mensajeBienvenida = `¡Hola, ${nombre}! 👋 Gracias por registrarte. Tu nivel es: ${nivel}. Te invitamos a mirar nuestra guía completa de uso de la plataforma aqui: 👇👇👇 \n https://youtu.be/o17Ja8WUFXA`;
         
 
-        sendWhatsAppMessage(whatsApp, mensajeBienvenida);
+        sendWhatsAppMessage(whatsApp, mensajeBienvenida); 
         if (nivel.toLowerCase() === 'licenciatura' || nivel.toLowerCase() === 'ingeniería') {
             const pdfUrl2 = process.env.PDF_BIENVENIDA_URL2;
             await sendWhatsAppPdfWithUrl(whatsApp, pdfUrl2, 'Bienvenida ULAL.pdf');
         }else if (nivel.toLowerCase() === 'preparatoria') {
             const pdfUrl = process.env.PDF_BIENVENIDA_URL; 
         sendWhatsAppPdfWithUrl(whatsApp, pdfUrl, 'Documento de Bienvenida.pdf');
-        }
+        }*/
         // 2. Creamos el registro en MongoDB
         const nuevoRegistro = new Registro({ nombre, apellido, whatsApp, email, nivel });
         await nuevoRegistro.save();
